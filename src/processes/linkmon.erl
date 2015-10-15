@@ -16,6 +16,40 @@ myproc() ->
   timer:sleep(5000),
   exit(reason).
 
+echo(Name) ->
+  receive
+    exit ->
+      io:format("Process '" + Name + "' exits"),
+      exit("Process" + Name + " dies ");
+    Msg ->
+      io:format("Process '" + Name + "' receive" + Msg),
+      echo(Name)
+  end.
+
+
+echo_link(Name, ChildPid) ->
+  erlang:link(ChildPid),
+  receive
+    exit ->
+      io:format("Process '" + Name + "' exits"),
+      exit("Process" + Name + " dies ");
+    Msg ->
+      io:format("Process '" + Name + "' receive" + Msg),
+      echo(Name)
+  end.
+
+echo_monitor(Name, ChildPid) ->
+  erlang:monitor(process, ChildPid),
+  receive
+    exit ->
+      io:format("Process '" + Name + "' exits"),
+      exit("Process" + Name + " dies ");
+    Msg ->
+      io:format("Process '" + Name + "' receive" + Msg),
+      echo(Name)
+  end.
+
+
 chain(0) ->
   receive
     _ -> ok
@@ -28,3 +62,4 @@ chain(N) ->
   receive
     _ -> ok
   end.
+
