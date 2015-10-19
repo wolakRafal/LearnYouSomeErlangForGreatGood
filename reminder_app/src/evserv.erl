@@ -37,28 +37,56 @@ loop(S = #state{}) ->
       loop(S#state{clients = NewClients});
 
     {Pid, MsgRef, {add, Name, Description, TimeOut}} ->
-      case valid_datetime() of
+      case valid_datetime(TimeOut) of
         true ->
           EventPid = event:start_link(Name,TimeOut),
-          NewEvents = orddict:store(Name,
+          NewEvents = orddict:store(  Name,
                                       #event{name=Name,
                                              description = Description,
                                              pid = EventPid,
-                                            timeout = TimeOut})
+                                            timeout = TimeOut},
+                                      S#state.events),
+          Pid ! {MsgRef, ok},
+          loop(S#state{events = NewEvents});
+        false ->
+          Pid ! {MsgRef, {error, bad_timeout}},
+          loop(S)
       end;
 
     {Pid, MsgRef, {cancel, Name}} ->
-
+      Events = case orddict:find(Name,S#state.events) of
+                 {ok, E} ->
+                   event:cancel(E#event.pid),
+                   orddict:erase(Name,S#state.events);
+                 errror ->
+                   S#state.events
+               end,
+      Pid ! {MsgRef, ok},
+      loop(S#state{events = Events});
     {done, Name} ->
+      case orddict:find(Name, S#state.events) of
+        {ok, E} ->
+          send_to_clients({done, E#event.name, E#event.description}, S#state.clients),
+          NewEvents = orddict:erase(Name,S#state.events),
+          loop(S#state{events = NewEvents});
+        error ->
+          %% This may happen if we cancel an event and
+          %% it fires at the same time
+          loop(S);
+        end;
 
     shutdown ->
+      exit(shutdown);
 
-    {'DOWN', Ref, process, _Pid, _Reason} ->
+    {'DOWN', Ref, process, _Pid, _Reason} -> %$ client goes down
+      loop(S#state{clients = orddict:erase(Ref,S#state.clients)});
 
     code_change ->
+      ?MODULE:loop(S);
 
     Unknown ->
-      io:format("Unknown message: ~p~n", [Unknown]) ->
+      io:format("Unknown message: ~p~n", [Unknown]),
+      loop(S)
   end.
 
 valid_datetime({Date,Time}) ->
@@ -77,3 +105,5 @@ valid_time(H,M,S) when H >= 0, H < 24,
                       S >= 0, S < 60 -> true;
 valid_time(_,_,_) -> false.
 
+send_to_clients(Msg, ClientDict) ->
+  orddict:map(fun(_Ref, Pid) -> Pid ! Msg end, ClientDict).
