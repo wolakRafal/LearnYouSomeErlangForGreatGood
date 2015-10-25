@@ -1,18 +1,18 @@
 %%%-------------------------------------------------------------------
 %%% @author Rafal Wolak
-%%% @copyright (C) 2015, <COMPANY>
+%%% @copyright (C) 2015, robo software innovations
 %%% @doc
 %%%
 %%% @end
-%%% Created : 22. Oct 2015 23:14
+%%% Created : 25. Oct 2015 19:34
 %%%-------------------------------------------------------------------
--module(ppool_sup).
+-module(ppool_worker_sup).
 -author("Rafal Wolak").
 
 -behaviour(supervisor).
 
 %% API
--export([start_link/3]).
+-export([start_link/1]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -25,13 +25,12 @@
 
 %%--------------------------------------------------------------------
 %% @doc
-%% Starts the pool supervisor
+%% Starts the supervisor
 %%
 %% @end
 %%--------------------------------------------------------------------
-start_link(Name,Limit,MFA) ->
-  supervisor:start_link(?MODULE, {Name,Limit,MFA}).
-%%   supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(MFA = {_,_,_}) ->
+  supervisor:start_link(?MODULE, MFA).
 
 %%%===================================================================
 %%% Supervisor callbacks
@@ -47,15 +46,20 @@ start_link(Name,Limit,MFA) ->
 %%
 %% @end
 %%--------------------------------------------------------------------
-init({Name,Limit,MFA}) ->
-  MaxRestart = 1,
-  MaxTime = 3600,
-  SupFlags = {one_for_all,MaxRestart,MaxTime},
-  AChild = {serv, {ppool_serv, start_link, [Name,Limit, self(), MFA]},
-            permanent,
-            5000, %Shutdown time
-            worker,
-            [ppool_serv]},
+init({M,F,A}) ->
+  RestartStrategy = simple_one_for_one,
+  MaxRestarts = 5,
+  MaxSecondsBetweenRestarts = 3600,
+
+  SupFlags = {RestartStrategy, MaxRestarts, MaxSecondsBetweenRestarts},
+
+  Restart = temporary,
+  Shutdown = 5000,
+  Type = worker,
+
+  AChild = {ppool_worker, {M, F, A},
+    Restart, Shutdown, Type, [M]},
+
   {ok, {SupFlags, [AChild]}}.
 
 %%%===================================================================
